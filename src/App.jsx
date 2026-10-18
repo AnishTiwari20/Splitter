@@ -930,10 +930,10 @@ export default function App() {
 
                             {/* Who bought / paid */}
                             <div className="flex items-center space-x-1.5 text-xs mt-1">
-                              <span className="text-slate-500">Khareeda:</span>
+                              <span className="text-slate-500">Paid by:</span>
                               {isPayerMe ? (
                                 <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[11px]">
-                                  ⭐ Aapne ({payerName})
+                                  ⭐ You ({payerName})
                                 </span>
                               ) : (
                                 <span className="font-bold text-slate-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md text-[11px]">
@@ -944,8 +944,8 @@ export default function App() {
 
                             {/* Who participated */}
                             <div className="text-[11px] text-slate-500 mt-1">
-                              <span className="text-slate-600 font-medium">Shaamil the: </span>
-                              <span>{isAll ? 'Sabhi members' : participantNames.join(', ')}</span>
+                              <span className="text-slate-600 font-medium">Shared by: </span>
+                              <span>{isAll ? 'All members' : participantNames.join(', ')}</span>
                             </div>
                           </div>
 
@@ -964,14 +964,14 @@ export default function App() {
                           <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
                             {didIParticipate ? (
                               <div className="flex items-center space-x-1.5 text-slate-700 font-medium">
-                                <span>👉 Aapka hissa (Your share):</span>
+                                <span>👉 Your share:</span>
                                 <strong className="text-slate-900 font-mono font-bold">
                                   ₹{myShareAmount.toFixed(2)}
                                 </strong>
                               </div>
                             ) : (
                               <span className="text-slate-400 italic text-[11px]">
-                                ⚪ Aap isme shaamil nahi the (₹0)
+                                ⚪ Not included (₹0)
                               </span>
                             )}
 
@@ -996,32 +996,32 @@ export default function App() {
         {activeTab === 'settle' && (
           <div className="space-y-4 animate-in fade-in duration-150">
             
-            {/* 1. PERSONALIZED SETTLEMENT SECTION: MERA HISAAB */}
+            {/* 1. PERSONALIZED SETTLEMENT SECTION: YOUR SETTLEMENT */}
             {currentUser && isCurrentUserInActiveRoom ? (
               <section className="bg-slate-900 text-white border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3.5">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
                   <div className="flex items-center space-x-2">
                     <UserCheck className="w-4 h-4 text-emerald-400" />
                     <h2 className="text-sm font-extrabold tracking-tight">
-                      Mera Hisaab ({currentUser})
+                      Your Settlement ({currentUser})
                     </h2>
                   </div>
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
-                    Your Dues
+                    Personal Dues
                   </span>
                 </div>
 
                 {mySettlements.myDebtsToPay.length === 0 && mySettlements.myCreditsToReceive.length === 0 ? (
                   <div className="py-4 text-center text-xs text-slate-300 bg-slate-800/60 rounded-xl leading-relaxed">
-                    🎉 <strong>Aapka hisaab clear hai!</strong><br />Aapko na kisi ko dena hai, na kisi se lena hai.
+                    🎉 <strong>All settled up!</strong><br />You don't owe anyone and no one owes you.
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {/* You Have To Pay (Dena Hai) */}
+                    {/* You Have To Pay */}
                     {mySettlements.myDebtsToPay.length > 0 && (
                       <div className="space-y-1.5">
                         <span className="text-[11px] font-bold text-rose-300 uppercase tracking-wider block">
-                          🔴 Aapko Inhe Dena Hai (You Pay):
+                          🔴 You Owe:
                         </span>
                         {mySettlements.myDebtsToPay.map((tx, idx) => (
                           <div
@@ -1029,7 +1029,7 @@ export default function App() {
                             className="bg-slate-800/90 border border-rose-900/40 rounded-xl p-3 flex items-center justify-between"
                           >
                             <div className="text-xs">
-                              <span className="text-slate-300">Pay to </span>
+                              <span className="text-slate-300">Pay </span>
                               <strong className="text-white font-bold text-sm">{tx.toName}</strong>
                             </div>
                             <div className="font-mono font-extrabold text-rose-400 text-base">
@@ -1040,11 +1040,11 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* You Will Receive (Lena Hai) */}
+                    {/* You Will Receive */}
                     {mySettlements.myCreditsToReceive.length > 0 && (
                       <div className="space-y-1.5">
                         <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider block">
-                          🟢 Inse Aapko Milenge (You Receive):
+                          🟢 You Are Owed:
                         </span>
                         {mySettlements.myCreditsToReceive.map((tx, idx) => (
                           <div
@@ -1065,7 +1065,7 @@ export default function App() {
 
                     {/* Overall Net Balance */}
                     <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
-                      <span className="text-slate-400">Total Net Balance:</span>
+                      <span className="text-slate-400">Net Balance:</span>
                       <span className={`font-mono font-bold text-sm ${
                         mySettlements.myNetBalance > 0.01 
                           ? 'text-emerald-400' 
@@ -1084,7 +1084,7 @@ export default function App() {
             ) : (
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs text-center space-y-2">
                 <p className="text-xs text-slate-600">
-                  {currentUser ? `Aap "${activeRoom.name}" ke member nahi hain.` : 'Apna hisaab dekhne ke liye pehle apna naam select karein.'}
+                  {currentUser ? `You are not a member of "${activeRoom.name}".` : 'Select your name to view your individual settlement.'}
                 </p>
                 <button
                   type="button"
@@ -1118,7 +1118,7 @@ export default function App() {
                 <div className="space-y-3 pt-2 border-t border-slate-100">
                   {calculation.settlements.length === 0 ? (
                     <div className="py-4 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-200">
-                      ✅ Sabhi ka hisaab barabar hai. Koi dues pending nahi hain.
+                      ✅ Everyone is settled up. No payments pending.
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -1265,7 +1265,7 @@ export default function App() {
               <div className="flex items-center space-x-2">
                 <User className="w-5 h-5 text-slate-800" />
                 <h3 className="text-base font-extrabold text-slate-900">
-                  Aapka Naam Kya Hai?
+                  What's your name?
                 </h3>
               </div>
               {currentUser && (
@@ -1280,7 +1280,7 @@ export default function App() {
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed">
-              Apna naam choose karein taaki aapko sirf aapki lists aur aapka personal hisaab dikhe.
+              Select or enter your name to view your lists and personalized settlements.
             </p>
 
             {/* Existing Known Members Chips */}
@@ -1318,7 +1318,7 @@ export default function App() {
             >
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Ya naya naam likhein:
+                  Or enter a new name:
                 </label>
                 <input
                   type="text"
