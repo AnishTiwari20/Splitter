@@ -6,7 +6,6 @@ import {
   Check, 
   Wifi, 
   WifiOff, 
-  Calculator, 
   RotateCcw,
   Users,
   Receipt,
@@ -14,12 +13,15 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronUp,
-  AlertCircle
+  AlertCircle,
+  ArrowRight,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { round, calculateDetailedSummary } from './utils/debtSimplifier';
 import { syncManager } from './utils/syncManager';
 
-// Personalized clean default: No hardcoded dummy members or dummy expenses
+// Personalized clean default: 0 hardcoded dummy members or fake expenses
 const DEFAULT_ROOMS = [
   {
     id: 'my-trip',
@@ -186,7 +188,7 @@ export default function App() {
     const newRoom = {
       id: newId,
       name: clean,
-      members: [], // Start clean with no dummy members
+      members: [],
       expenses: [],
     };
 
@@ -197,7 +199,6 @@ export default function App() {
     setIsAddingList(false);
   };
 
-  // Delete List
   const handleDeleteList = (roomIdToDelete) => {
     const target = rooms.find(r => r.id === roomIdToDelete) || activeRoom;
     if (!confirm(`Are you sure you want to delete "${target.name}" and all its expenses?`)) {
@@ -205,7 +206,6 @@ export default function App() {
     }
 
     if (rooms.length <= 1) {
-      // If deleting the only remaining list, reset it to a clean empty list
       const freshList = {
         id: 'new-list-' + Date.now().toString().slice(-4),
         name: 'New List',
@@ -232,7 +232,6 @@ export default function App() {
     const name = newMemberName.trim();
     if (!name) return;
 
-    // Check duplicate
     if (members.some(m => m.name.toLowerCase() === name.toLowerCase())) {
       alert(`A member named "${name}" is already in this list.`);
       return;
@@ -251,7 +250,6 @@ export default function App() {
     setNewMemberName('');
   };
 
-  // Fully personalized: Allow removing any member cleanly
   const handleRemoveMember = (memberId) => {
     updateActiveRoom(prev => ({
       ...prev,
@@ -269,6 +267,9 @@ export default function App() {
       }
     });
   };
+
+  const selectAllParticipants = () => setSelectedParticipants(members.map(m => m.id));
+  const deselectAllParticipants = () => setSelectedParticipants([]);
 
   const handleAddExpense = (e) => {
     e.preventDefault();
@@ -359,44 +360,46 @@ export default function App() {
   }, [inspectedMemberId, calculation]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-16">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-20">
       
-      {/* Top Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      {/* Top Header - Mobile Optimized */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+        <div className="max-w-3xl mx-auto px-3.5 sm:px-4 py-2.5 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <span className="font-extrabold text-lg tracking-tight text-slate-900">
               Splitter
             </span>
-            <div className="flex items-center space-x-1 ml-2 px-2 py-0.5 rounded-full text-[11px] font-medium border bg-slate-100 text-slate-600">
+            <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-medium border bg-slate-100 text-slate-600">
               <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-              <span>{isOnline ? 'Live Sync' : 'Local / Offline'}</span>
+              <span>{isOnline ? 'Online' : 'Offline'}</span>
             </div>
           </div>
 
           <button
             type="button"
             onClick={handleShareLink}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition shadow-sm"
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition active:scale-95 shadow-xs"
             title={`Copy direct link for "${activeRoom.name}"`}
           >
             {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
-            <span>{copiedLink ? 'Link Copied!' : `Share "${activeRoom.name}"`}</span>
+            <span className="truncate max-w-[120px] sm:max-w-none">
+              {copiedLink ? 'Copied!' : 'Share List'}
+            </span>
           </button>
         </div>
 
-        {/* Lists Bar with direct delete option */}
-        <div className="max-w-3xl mx-auto px-4 py-2 flex items-center space-x-2 overflow-x-auto no-scrollbar">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap mr-1">
+        {/* Lists Bar - Touch Friendly Horizontal Swipe */}
+        <div className="max-w-3xl mx-auto px-3.5 sm:px-4 py-2 flex items-center space-x-2 overflow-x-auto no-scrollbar">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap mr-0.5">
             Lists:
           </span>
           {rooms.map(r => (
             <div
               key={r.id}
-              className={`inline-flex items-center rounded-lg border transition ${
+              className={`inline-flex items-center rounded-lg border transition flex-shrink-0 ${
                 r.id === activeRoomId
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                  : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                  : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
               }`}
             >
               <button
@@ -413,7 +416,7 @@ export default function App() {
                     e.stopPropagation();
                     handleDeleteList(r.id);
                   }}
-                  className={`pr-2.5 pl-1 py-1 text-xs transition ${
+                  className={`pr-2.5 pl-1 py-1.5 text-xs transition ${
                     r.id === activeRoomId ? 'text-slate-400 hover:text-rose-400' : 'text-slate-400 hover:text-rose-600'
                   }`}
                   title={`Delete "${r.name}"`}
@@ -425,18 +428,18 @@ export default function App() {
           ))}
 
           {isAddingList ? (
-            <form onSubmit={handleCreateList} className="flex items-center space-x-1.5 whitespace-nowrap">
+            <form onSubmit={handleCreateList} className="flex items-center space-x-1.5 whitespace-nowrap flex-shrink-0">
               <input
                 type="text"
                 autoFocus
-                placeholder="List name (e.g. Goa Trip)"
+                placeholder="List name..."
                 value={newListName}
                 onChange={e => setNewListName(e.target.value)}
-                className="bg-white border border-slate-400 rounded-lg px-2.5 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                className="bg-white border border-slate-400 rounded-lg px-2.5 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 w-28 sm:w-36"
               />
               <button
                 type="submit"
-                className="px-2 py-1 bg-slate-900 text-white text-xs font-semibold rounded-lg"
+                className="px-2.5 py-1 bg-slate-900 text-white text-xs font-semibold rounded-lg"
               >
                 Add
               </button>
@@ -452,7 +455,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsAddingList(true)}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900 border border-dashed border-slate-300 hover:border-slate-400 flex items-center space-x-1 whitespace-nowrap"
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 border border-dashed border-slate-300 hover:border-slate-400 flex items-center space-x-1 whitespace-nowrap flex-shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New List</span>
@@ -462,35 +465,35 @@ export default function App() {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-3xl mx-auto px-3.5 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         
-        {/* Active List Header with Delete List Action */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 gap-3">
+        {/* Active List Header */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-xl font-bold text-slate-900">
+              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
                 {activeRoom.name}
               </h1>
               <button
                 type="button"
                 onClick={handleShareLink}
-                className="text-slate-400 hover:text-slate-800 p-1 rounded-md transition"
-                title={`Copy direct link for ${activeRoom.name}`}
+                className="text-slate-400 hover:text-slate-800 p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition"
+                title={`Copy direct WhatsApp link for ${activeRoom.name}`}
               >
-                <Share2 className="w-4 h-4" />
+                <Share2 className="w-3.5 h-3.5" />
               </button>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Direct Link: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono text-[11px]">#/{activeRoomId}</code> • {members.length} member(s) • {expenses.length} expense(s)
+            <p className="text-xs text-slate-500 mt-1">
+              Direct Link: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono text-[11px]">#/{activeRoomId}</code> • {members.length} members
             </p>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 pt-1 sm:pt-0">
             {expenses.length > 0 && (
               <button
                 type="button"
                 onClick={handleClearAllExpenses}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition flex items-center space-x-1"
+                className="flex-1 sm:flex-none px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition flex items-center justify-center space-x-1"
                 title="Reset all expenses in this list to zero"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -501,7 +504,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => handleDeleteList(activeRoomId)}
-              className="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition flex items-center space-x-1"
+              className="flex-1 sm:flex-none px-3 py-2 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition flex items-center justify-center space-x-1"
               title="Delete this entire list"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -510,34 +513,34 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. MEMBERS SECTION (Personalized: Add your own members) */}
-        <section className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+        {/* 1. MEMBERS SECTION - Touch Friendly */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
               <Users className="w-3.5 h-3.5 text-slate-700" />
               <span>Members ({members.length})</span>
             </h2>
             <span className="text-[11px] text-slate-400">
-              Add your friends who are in this list
+              Tap ✕ to remove
             </span>
           </div>
 
           {members.length === 0 ? (
-            <div className="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-3 text-center text-xs text-slate-500">
-              👋 No members added yet. Type your name and your friends' names below to get started!
+            <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 text-center text-xs text-slate-500 leading-relaxed">
+              👋 No members added yet.<br />Type your name and your friends' names below to get started!
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {members.map(m => (
                 <span
                   key={m.id}
-                  className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200"
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200"
                 >
                   <span>{m.name}</span>
                   <button
                     type="button"
                     onClick={() => handleRemoveMember(m.id)}
-                    className="text-slate-400 hover:text-rose-600 transition"
+                    className="text-slate-400 hover:text-rose-600 p-0.5 rounded-full"
                     title={`Remove ${m.name}`}
                   >
                     <X className="w-3 h-3" />
@@ -550,74 +553,82 @@ export default function App() {
           <form onSubmit={handleAddMember} className="flex items-center space-x-2 pt-1">
             <input
               type="text"
-              placeholder="Type member name (e.g. Anish, Rahul, Priya)..."
+              placeholder="Friend's name (e.g. Rahul, Priya)..."
               value={newMemberName}
               onChange={e => setNewMemberName(e.target.value)}
-              className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900"
+              className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900"
             />
             <button
               type="submit"
-              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition"
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition active:scale-95 whitespace-nowrap"
             >
-              + Add Member
+              + Add
             </button>
           </form>
         </section>
 
-        {/* 2. ADD EXPENSE SECTION */}
-        <section className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-4">
+        {/* 2. ADD EXPENSE SECTION - Mobile Thumb Friendly */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
             <Receipt className="w-3.5 h-3.5 text-slate-700" />
             <span>Add New Payment</span>
           </h2>
 
           {members.length < 2 ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 flex items-start space-x-2 text-xs text-amber-800">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start space-x-2 text-xs text-amber-800 leading-relaxed">
               <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <span>
-                Please add at least <strong>2 members</strong> above to start recording and splitting payments.
+                Please add at least <strong>2 members</strong> above before you can record and split a payment.
               </span>
             </div>
           ) : (
             <form onSubmit={handleAddExpense} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Amount (₹)
-                  </label>
+              
+              {/* Amount - Large ATM Style */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Amount
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">
+                    ₹
+                  </span>
                   <input
                     type="number"
                     step="any"
                     required
-                    placeholder="e.g. 100"
+                    placeholder="0.00"
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-3 text-lg font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
+              </div>
 
+              {/* Description & Payer */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
                     What was this for?
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Food, Cab, Snacks"
+                    placeholder="e.g. Food, Uber, Groceries"
                     value={description}
                     onChange={e => setDescription(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
                     Who paid?
                   </label>
                   <select
                     value={payerId}
                     onChange={e => setPayerId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
                   >
                     {members.map(m => (
                       <option key={m.id} value={m.id}>
@@ -628,46 +639,61 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Who participated / Ate? */}
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+              {/* Who participated / Ate? (Touch Checkbox Cards) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700">
-                    Who shared / ate? (Uncheck anyone who did not participate)
+                  <span className="font-bold text-slate-700">
+                    Who participated / ate?
                   </span>
-                  <span className="font-mono text-slate-500">
-                    {selectedParticipants.length} of {members.length} selected
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={selectAllParticipants}
+                      className="text-slate-600 hover:text-slate-900 font-semibold"
+                    >
+                      All
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={deselectAllParticipants}
+                      className="text-slate-500 hover:text-slate-900"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <div className="grid grid-cols-2 gap-2 pt-1">
                   {members.map(m => {
                     const isChecked = selectedParticipants.includes(m.id);
                     return (
-                      <label
+                      <button
                         key={m.id}
-                        className={`flex items-center space-x-2 p-2 rounded-lg border text-xs cursor-pointer select-none transition ${
+                        type="button"
+                        onClick={() => toggleParticipant(m.id)}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-medium transition select-none active:scale-98 min-h-[44px] ${
                           isChecked
-                            ? 'bg-white border-slate-400 text-slate-900 font-medium shadow-xs'
+                            ? 'bg-white border-slate-900 text-slate-900 shadow-xs'
                             : 'bg-slate-100 border-slate-200 text-slate-400 line-through'
                         }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleParticipant(m.id)}
-                          className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                        />
-                        <span className="truncate">{m.name}</span>
-                      </label>
+                        <span className="truncate pr-1">{m.name}</span>
+                        {isChecked ? (
+                          <CheckSquare className="w-4 h-4 text-slate-900 flex-shrink-0" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                        )}
+                      </button>
                     );
                   })}
                 </div>
 
                 {numAmount > 0 && selectedParticipants.length > 0 && (
-                  <div className="text-[11px] text-slate-600 pt-1">
-                    👉 Split: <strong>₹{perPersonPreview} each</strong> among {selectedParticipants.length} member(s).
+                  <div className="text-xs text-slate-700 pt-1.5 font-medium border-t border-slate-200">
+                    👉 Split: <strong className="text-slate-900 font-mono">₹{perPersonPreview} each</strong> among {selectedParticipants.length} member(s).
                     {members.length > selectedParticipants.length && (
-                      <span className="text-amber-700 font-medium ml-1">
+                      <span className="text-amber-700 font-medium ml-1 block sm:inline mt-0.5 sm:mt-0">
                         ({members.length - selectedParticipants.length} member did not participate)
                       </span>
                     )}
@@ -677,7 +703,7 @@ export default function App() {
 
               <button
                 type="submit"
-                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition"
+                className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition active:scale-98 shadow-xs"
               >
                 + Record Payment
               </button>
@@ -685,76 +711,128 @@ export default function App() {
           )}
         </section>
 
-        {/* 3. RECORDED PAYMENTS TABLE */}
-        <section className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-3">
+        {/* 3. RECORDED PAYMENTS - Mobile Cards + Desktop Table */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Recorded Expenses ({expenses.length})
             </h2>
-            <span className="text-xs font-bold text-slate-900">
+            <span className="text-xs font-extrabold text-slate-900 font-mono">
               Total: ₹{calculation.totalAmount.toFixed(2)}
             </span>
           </div>
 
           {expenses.length === 0 ? (
             <p className="text-xs text-slate-400 text-center py-6 italic">
-              No expenses recorded yet for this list. Add a payment above.
+              No expenses recorded yet. Add a payment above.
             </p>
           ) : (
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">Reason</th>
-                    <th className="py-2.5 px-3">Paid By</th>
-                    <th className="py-2.5 px-3 text-right">Amount</th>
-                    <th className="py-2.5 px-3">Split Between</th>
-                    <th className="py-2.5 px-2 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {expenses.map(exp => {
-                    const participantNames = Object.keys(exp.splits || {})
-                      .map(id => memberMap[id])
-                      .filter(Boolean);
-                    const isAll = participantNames.length === members.length;
+            <>
+              {/* MOBILE VIEW: Clean Touch Cards */}
+              <div className="sm:hidden space-y-2.5">
+                {expenses.map(exp => {
+                  const participantNames = Object.keys(exp.splits || {})
+                    .map(id => memberMap[id])
+                    .filter(Boolean);
+                  const isAll = participantNames.length === members.length;
 
-                    return (
-                      <tr key={exp.id} className="hover:bg-slate-50 transition">
-                        <td className="py-2.5 px-3 font-medium text-slate-900">
-                          {exp.description}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-700">
-                          {memberMap[exp.payerId] || 'Unknown'}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-bold text-slate-900 font-mono">
-                          ₹{exp.amount.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600">
+                  return (
+                    <div
+                      key={exp.id}
+                      className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between">
+                          <h4 className="text-sm font-bold text-slate-900 truncate">
+                            {exp.description}
+                          </h4>
+                          <span className="text-sm font-extrabold text-slate-900 font-mono pl-2">
+                            ₹{exp.amount.toFixed(2)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Paid by <strong className="text-slate-800">{memberMap[exp.payerId] || 'Unknown'}</strong>
+                        </p>
+                        <p className="text-[11px] text-slate-600 mt-1">
                           {isAll ? (
-                            <span className="text-slate-500">All members</span>
+                            <span className="text-slate-500">Shared by all members</span>
                           ) : (
-                            <span className="text-amber-800">
-                              {participantNames.join(', ')} ({participantNames.length})
+                            <span className="text-amber-800 font-medium">
+                              Shared by {participantNames.join(', ')} ({participantNames.length})
                             </span>
                           )}
-                        </td>
-                        <td className="py-2.5 px-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteExpense(exp.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 transition"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteExpense(exp.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg -mr-1"
+                        title="Delete expense"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* DESKTOP VIEW: Full Clean Table */}
+              <div className="hidden sm:block overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">Reason</th>
+                      <th className="py-2.5 px-3">Paid By</th>
+                      <th className="py-2.5 px-3 text-right">Amount</th>
+                      <th className="py-2.5 px-3">Split Between</th>
+                      <th className="py-2.5 px-2 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {expenses.map(exp => {
+                      const participantNames = Object.keys(exp.splits || {})
+                        .map(id => memberMap[id])
+                        .filter(Boolean);
+                      const isAll = participantNames.length === members.length;
+
+                      return (
+                        <tr key={exp.id} className="hover:bg-slate-50 transition">
+                          <td className="py-2.5 px-3 font-medium text-slate-900">
+                            {exp.description}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-700">
+                            {memberMap[exp.payerId] || 'Unknown'}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-slate-900 font-mono">
+                            ₹{exp.amount.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600">
+                            {isAll ? (
+                              <span className="text-slate-500">All members</span>
+                            ) : (
+                              <span className="text-amber-800">
+                                {participantNames.join(', ')} ({participantNames.length})
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteExpense(exp.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 transition"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </section>
 
@@ -763,26 +841,89 @@ export default function App() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-slate-900">
-                Split Calculation & Verification
+                Split Calculation & Settlement
               </h2>
-              <div className="flex items-center space-x-1.5 text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <div className="flex items-center space-x-1.5 text-[11px] sm:text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Zero-Sum Verified ✓</span>
               </div>
             </div>
 
-            {/* TABLE 1: SUMMARY PER MEMBER */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-3">
+            {/* TABLE 1: SUMMARY PER MEMBER (Mobile Cards + Desktop Table) */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  1. Member Summary Table
+                  1. Member Balances
                 </h3>
                 <span className="text-[11px] text-slate-400">
-                  Click any member to inspect itemized breakdown
+                  Tap member to inspect receipt
                 </span>
               </div>
 
-              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              {/* MOBILE VIEW: Clean Cards */}
+              <div className="sm:hidden space-y-2">
+                {calculation.memberRows.map(row => {
+                  const isGetsBack = row.netBalance > 0.01;
+                  const isOwes = row.netBalance < -0.01;
+                  const isInspected = inspectedMemberId === row.id;
+
+                  return (
+                    <div
+                      key={row.id}
+                      onClick={() => setInspectedMemberId(isInspected ? null : row.id)}
+                      className={`border rounded-xl p-3 transition cursor-pointer ${
+                        isInspected
+                          ? 'bg-slate-100/80 border-slate-400'
+                          : 'bg-slate-50 border-slate-200 active:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-slate-900 text-sm">
+                            {row.name}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                              isGetsBack
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : isOwes
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-slate-200 text-slate-600'
+                            }`}
+                          >
+                            {row.status}
+                          </span>
+                        </div>
+
+                        <div
+                          className={`font-mono font-extrabold text-base ${
+                            isGetsBack
+                              ? 'text-emerald-600'
+                              : isOwes
+                              ? 'text-rose-600'
+                              : 'text-slate-500'
+                          }`}
+                        >
+                          {isGetsBack && '+'}
+                          ₹{row.netBalance.toFixed(2)}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-slate-500 mt-2 pt-2 border-t border-slate-200/60">
+                        <span>Paid: <strong className="text-slate-700 font-mono">₹{row.totalPaid.toFixed(2)}</strong></span>
+                        <span>Share: <strong className="text-slate-700 font-mono">₹{row.fairShare.toFixed(2)}</strong></span>
+                        <span className="text-[10px] text-slate-400 flex items-center space-x-0.5">
+                          <span>Details</span>
+                          {isInspected ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* DESKTOP VIEW: Full Table */}
+              <div className="hidden sm:block overflow-x-auto border border-slate-200 rounded-xl">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
                     <tr>
@@ -808,8 +949,8 @@ export default function App() {
                             isInspected ? 'bg-slate-100/80 font-medium' : 'hover:bg-slate-50'
                           }`}
                         >
-                          <td className="py-2.5 px-3 font-semibold text-slate-900 flex items-center space-x-1.5">
-                            <span>{row.name}</span>
+                          <td className="py-2.5 px-3 font-semibold text-slate-900">
+                            {row.name}
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono text-slate-700">
                             ₹{row.totalPaid.toFixed(2)}
@@ -852,27 +993,26 @@ export default function App() {
                 </table>
               </div>
 
-              {/* EXPANDED ITEMIZED AUDIT FOR SELECTED MEMBER */}
+              {/* ITEMIZED AUDIT EXPANSION FOR SELECTED MEMBER */}
               {inspectedMember && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs space-y-3 animate-in fade-in">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs space-y-3 animate-in fade-in">
                   <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
                     <span className="font-bold text-slate-900">
-                      Audit Breakdown for {inspectedMember.name}:
+                      Receipt Breakdown for {inspectedMember.name}:
                     </span>
                     <button
                       type="button"
                       onClick={() => setInspectedMemberId(null)}
-                      className="text-slate-400 hover:text-slate-600"
+                      className="text-slate-400 hover:text-slate-600 p-1"
                     >
-                      ✕ Close
+                      ✕
                     </button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Paid List */}
                     <div className="space-y-1">
-                      <span className="text-[11px] font-semibold text-slate-500 block uppercase tracking-wider">
-                        Expenses Paid by {inspectedMember.name} (Total: ₹{inspectedMember.totalPaid.toFixed(2)}):
+                      <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                        Paid by {inspectedMember.name} (Total: ₹{inspectedMember.totalPaid.toFixed(2)}):
                       </span>
                       {inspectedMember.details.paidList.length === 0 ? (
                         <p className="text-slate-400 italic">No payments made.</p>
@@ -886,10 +1026,9 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Consumed / Fair Share List */}
                     <div className="space-y-1">
-                      <span className="text-[11px] font-semibold text-slate-500 block uppercase tracking-wider">
-                        Bills Shared/Consumed (Total: ₹{inspectedMember.fairShare.toFixed(2)}):
+                      <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                        Shared/Consumed (Total: ₹{inspectedMember.fairShare.toFixed(2)}):
                       </span>
                       {inspectedMember.details.participatedList.length === 0 ? (
                         <p className="text-slate-400 italic">No bills shared.</p>
@@ -906,8 +1045,8 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="pt-1.5 border-t border-slate-200 text-slate-700">
-                    <strong>Math Formula:</strong> Net Balance = Total Paid (₹{inspectedMember.totalPaid.toFixed(2)}) − Fair Share (₹{inspectedMember.fairShare.toFixed(2)}) ={' '}
+                  <div className="pt-2 border-t border-slate-200 text-slate-800 text-xs">
+                    <strong>Net Formula:</strong> Paid (₹{inspectedMember.totalPaid.toFixed(2)}) − Share (₹{inspectedMember.fairShare.toFixed(2)}) ={' '}
                     <strong className={inspectedMember.netBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
                       {inspectedMember.netBalance >= 0 ? '+' : ''}₹{inspectedMember.netBalance.toFixed(2)}
                     </strong>
@@ -916,58 +1055,90 @@ export default function App() {
               )}
             </div>
 
-            {/* TABLE 2: WHO HAS TO PAY WHOM AND HOW MUCH */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-3">
+            {/* TABLE 2: WHO HAS TO PAY WHOM AND HOW MUCH (Mobile Cards + Desktop Table) */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                2. Final Settlement Table (Who Has to Pay Whom)
+                2. Final Settlements (Who Has to Pay Whom)
               </h3>
 
               {calculation.settlements.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="py-6 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-200">
                   ✅ Everyone is settled up! No payments pending.
                 </div>
               ) : (
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
-                      <tr>
-                        <th className="py-2.5 px-3 w-12 text-center">#</th>
-                        <th className="py-2.5 px-4 font-bold text-slate-800">Who Has to Pay</th>
-                        <th className="py-2.5 px-4 font-bold text-slate-800">Pays Whom</th>
-                        <th className="py-2.5 px-4 text-right font-bold text-slate-800">Amount (₹)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {calculation.settlements.map((tx, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 transition">
-                          <td className="py-3 px-3 text-center font-mono text-slate-400">
+                <>
+                  {/* MOBILE VIEW: Settlement Cards */}
+                  <div className="sm:hidden space-y-2">
+                    {calculation.settlements.map((tx, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-2 text-xs min-w-0">
+                          <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-600 font-bold flex items-center justify-center text-[10px] flex-shrink-0">
                             {idx + 1}
-                          </td>
-                          <td className="py-3 px-4 font-bold text-rose-600">
+                          </span>
+                          <span className="font-bold text-rose-600 truncate">
                             {tx.fromName}
-                          </td>
-                          <td className="py-3 px-4 font-bold text-emerald-600">
+                          </span>
+                          <span className="text-slate-400 text-[10px] flex items-center flex-shrink-0">
+                            pays ➔
+                          </span>
+                          <span className="font-bold text-emerald-600 truncate">
                             {tx.toName}
-                          </td>
-                          <td className="py-3 px-4 text-right font-extrabold text-slate-900 font-mono text-sm">
-                            ₹{tx.amount.toFixed(2)}
-                          </td>
+                          </span>
+                        </div>
+
+                        <div className="font-extrabold text-slate-900 font-mono text-sm pl-2 flex-shrink-0">
+                          ₹{tx.amount.toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* DESKTOP VIEW: Full Table */}
+                  <div className="hidden sm:block overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-3 w-12 text-center">#</th>
+                          <th className="py-2.5 px-4 font-bold text-slate-800">Who Has to Pay</th>
+                          <th className="py-2.5 px-4 font-bold text-slate-800">Pays Whom</th>
+                          <th className="py-2.5 px-4 text-right font-bold text-slate-800">Amount (₹)</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {calculation.settlements.map((tx, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 transition">
+                            <td className="py-3 px-3 text-center font-mono text-slate-400">
+                              {idx + 1}
+                            </td>
+                            <td className="py-3 px-4 font-bold text-rose-600">
+                              {tx.fromName}
+                            </td>
+                            <td className="py-3 px-4 font-bold text-emerald-600">
+                              {tx.toName}
+                            </td>
+                            <td className="py-3 px-4 text-right font-extrabold text-slate-900 font-mono text-sm">
+                              ₹{tx.amount.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
 
             {/* 3. MATHEMATICAL PROOF & CHECKSUM AUDIT */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-2">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs space-y-2">
               <h4 className="font-bold text-slate-800 flex items-center space-x-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>How you know these numbers are 100% correct:</span>
+                <span>Zero-Sum Verification:</span>
               </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-[11px]">
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200">
                   <span className="text-slate-500 block">Total Paid vs Consumed:</span>
                   <span className="font-bold text-slate-800 font-mono">
                     ₹{calculation.audit.totalPaidSum.toFixed(2)} = ₹{calculation.audit.totalShareSum.toFixed(2)}
@@ -975,20 +1146,20 @@ export default function App() {
                   <span className="text-emerald-600 block text-[10px] mt-0.5">✓ 100% matches</span>
                 </div>
 
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-slate-500 block">Zero-Sum Balance Check:</span>
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-500 block">Zero-Sum Balance:</span>
                   <span className="font-bold text-slate-800 font-mono">
                     Net Sum = ₹{calculation.audit.netSum.toFixed(2)}
                   </span>
                   <span className="text-emerald-600 block text-[10px] mt-0.5">✓ Exactly ₹0.00</span>
                 </div>
 
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200">
                   <span className="text-slate-500 block">Total Debt Cleared:</span>
                   <span className="font-bold text-slate-800 font-mono">
                     ₹{calculation.audit.totalSettlementAmount.toFixed(2)}
                   </span>
-                  <span className="text-emerald-600 block text-[10px] mt-0.5">✓ Fully squares all members</span>
+                  <span className="text-emerald-600 block text-[10px] mt-0.5">✓ Squares all debts</span>
                 </div>
               </div>
             </div>
