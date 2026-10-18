@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="50%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="cardGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.05" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded rect -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+
+  <!-- Inner glowing frame -->
+  <rect x="24" y="24" width="464" height="464" rx="92" fill="none" stroke="url(#cardGlow)" stroke-width="4" />
+
+  <!-- Central Split & Currency Icon -->
+  <g filter="url(#shadow)" transform="translate(96, 96)">
+    <!-- Main Card/Bill Base -->
+    <rect x="20" y="40" width="280" height="240" rx="36" fill="#ffffff" />
+    
+    <!-- Cut / Split Line in the middle -->
+    <path d="M 160 40 L 160 280" stroke="#6366f1" stroke-width="6" stroke-dasharray="14 10" />
+
+    <!-- Rupee / Currency Symbol Left Side -->
+    <g transform="translate(56, 100)">
+      <path d="M 10 15 L 55 15 M 10 28 L 45 28 M 10 15 L 10 28 C 35 28 35 55 10 55 L 45 95" 
+            fill="none" stroke="#4f46e5" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+
+    <!-- People / Split Friends Circles Right Side -->
+    <g transform="translate(195, 100)">
+      <!-- Person 1 -->
+      <circle cx="35" cy="24" r="18" fill="#10b981" />
+      <!-- Person 2 -->
+      <circle cx="15" cy="70" r="14" fill="#3b82f6" />
+      <!-- Person 3 -->
+      <circle cx="55" cy="70" r="14" fill="#f59e0b" />
+    </g>
+
+    <!-- Small split arrows -->
+    <circle cx="160" cy="160" r="28" fill="#6366f1" />
+    <path d="M 150 160 L 170 160 M 155 153 L 148 160 L 155 167 M 165 153 L 172 160 L 165 167" 
+          stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>
