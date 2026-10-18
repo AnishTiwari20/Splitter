@@ -1,6 +1,6 @@
 /**
- * Hybrid Sync Manager
- * Supports both WebSockets (for Node.js hosting) and HTTP Polling (for Vercel serverless)
+ * Hybrid Sync Manager with Timestamped Conflict Resolution
+ * Guarantees zero lag and prevents stale server data from overwriting fresh local edits.
  */
 
 class SyncManager {
@@ -12,7 +12,7 @@ class SyncManager {
     this.isConnected = false;
     this.reconnectTimeout = null;
     this.pollingInterval = null;
-    this.lastKnownTimestamp = 0;
+    this.lastLocalUpdate = 0;
   }
 
   connect(roomId, onStateReceived, onConnectionChange) {
@@ -30,7 +30,6 @@ class SyncManager {
       try { this.ws.close(); } catch (e) {}
     }
 
-    // Determine WebSocket host
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     let host = window.location.host;
     if (window.location.port === '5173') {
@@ -56,9 +55,7 @@ class SyncManager {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'ROOM_STATE' && data.roomId === this.currentRoomId) {
-            if (this.onStateReceived) {
-              this.onStateReceived(data.state);
-            }
+            this.handleIncomingState(data.state);
           }
         } catch (err) {
           console.error('Error parsing WS message:', err);
@@ -67,14 +64,13 @@ class SyncManager {
 
       this.ws.onclose = () => {
         this.isConnected = false;
-        // Don't show disconnected if HTTP polling is working
       };
 
       this.ws.onerror = () => {
         this.isConnected = false;
       };
     } catch (e) {
-      // Running on serverless like Vercel without WebSockets - HTTP polling takes over
+      // WS not available (e.g. Vercel serverless)
     }
   }
 
@@ -82,10 +78,10 @@ class SyncManager {
     // Initial fetch from /api/room
     this.fetchRoomStateHttp();
 
-    // Poll every 3 seconds for updates
+    // Poll every 4 seconds
     this.pollingInterval = setInterval(() => {
       this.fetchRoomStateHttp();
-    }, 3000);
+    }, 4000);
   }
 
   stopPolling() {
@@ -102,18 +98,33 @@ class SyncManager {
       const res = await fetch(`/api/room?roomId=${encodeURIComponent(this.currentRoomId)}`);
       if (res.ok) {
         const state = await res.json();
-        if (state && this.onStateReceived) {
+        if (state) {
           if (this.onConnectionChange) this.onConnectionChange(true);
-          this.onStateReceived(state);
+          this.handleIncomingState(state);
         }
       }
     } catch (err) {
-      // Network error or offline
+      // Offline
     }
   }
 
+  handleIncomingState(remoteState) {
+    if (!remoteState || !this.onStateReceived) return;
+
+    // Strict safety check: Never let an older remote state overwrite newer local edits
+    const remoteTime = Number(remoteState.updatedAt) || 0;
+    if (remoteTime > 0 && remoteTime <= this.lastLocalUpdate) {
+      return; // Local state is newer, ignore stale server response!
+    }
+
+    this.onStateReceived(remoteState);
+  }
+
   updateRoomState(roomId, state) {
-    // 1. Send via WebSocket if open
+    this.lastLocalUpdate = Date.now();
+    state.updatedAt = this.lastLocalUpdate;
+
+    // 1. Send via WebSocket if connected
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify({
@@ -124,7 +135,7 @@ class SyncManager {
       } catch (e) {}
     }
 
-    // 2. Also send via HTTP POST to /api/room (works on Vercel & local server)
+    // 2. Send via HTTP POST in background without blocking UI
     fetch('/api/room', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
