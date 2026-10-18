@@ -4,7 +4,6 @@ import {
   Trash2, 
   Share2, 
   Check, 
-  RotateCcw,
   Users,
   Receipt,
   X,
@@ -12,15 +11,16 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  ArrowRight,
   CheckSquare,
   Square,
-  Scale
+  Scale,
+  User,
+  UserCheck
 } from 'lucide-react';
 import { round, calculateDetailedSummary } from './utils/debtSimplifier';
 import { syncManager } from './utils/syncManager';
 
-// Clean default: zero dummy members
+// Default initial state
 const DEFAULT_ROOMS = [
   {
     id: 'my-trip',
@@ -32,6 +32,19 @@ const DEFAULT_ROOMS = [
 ];
 
 export default function App() {
+  // Current user identity for personalization
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      return localStorage.getItem('splitter_current_user') || '';
+    } catch (e) {
+      return '';
+    }
+  });
+
+  const [isSelectingUser, setIsSelectingUser] = useState(false);
+  const [userNameInput, setUserNameInput] = useState('');
+
+  // Rooms state
   const [rooms, setRooms] = useState(() => {
     try {
       const raw = localStorage.getItem('splitter_minimal_rooms_v1');
@@ -71,9 +84,13 @@ export default function App() {
   const [isAddingList, setIsAddingList] = useState(false);
   const [newListName, setNewListName] = useState('');
 
-  // Expandable audit proof
+  // Expandable audit proof and full group settlements
   const [showDetailedAudit, setShowDetailedAudit] = useState(false);
+  const [showFullGroupSettlements, setShowFullGroupSettlements] = useState(false);
   const [inspectedMemberId, setInspectedMemberId] = useState(null);
+
+  // Filter option: 'my' (only lists I am in) or 'all'
+  const [listFilterMode, setListFilterMode] = useState('my');
 
   // Listen to hash change from direct links or navigation
   useEffect(() => {
@@ -87,6 +104,42 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHash);
   }, [activeRoomId]);
 
+  // Persist current user to localStorage
+  const handleSetCurrentUser = (name) => {
+    const clean = name.trim();
+    if (!clean) return;
+    setCurrentUser(clean);
+    try {
+      localStorage.setItem('splitter_current_user', clean);
+    } catch (e) {}
+    setIsSelectingUser(false);
+    setUserNameInput('');
+  };
+
+  // List of all unique member names known across all lists
+  const allKnownMemberNames = useMemo(() => {
+    const set = new Set();
+    rooms.forEach(r => {
+      (r.members || []).forEach(m => {
+        if (m.name) set.add(m.name);
+      });
+    });
+    return Array.from(set);
+  }, [rooms]);
+
+  // Filtered rooms: only lists where currentUser is a member (if currentUser is set and filter is 'my')
+  const visibleRooms = useMemo(() => {
+    if (!currentUser || listFilterMode === 'all') {
+      return rooms;
+    }
+    const filtered = rooms.filter(r => 
+      (r.members || []).some(m => m.name.toLowerCase() === currentUser.toLowerCase())
+    );
+    // If user has no lists yet, fallback to showing all so they can create/join one
+    return filtered.length > 0 ? filtered : rooms;
+  }, [rooms, currentUser, listFilterMode]);
+
+  // Active room determination
   const activeRoom = useMemo(() => {
     let found = rooms.find(r => r.id === activeRoomId);
     if (!found) {
@@ -96,13 +149,13 @@ export default function App() {
         id: activeRoomId,
         name: cleanName.charAt(0).toUpperCase() + cleanName.slice(1),
         updatedAt: Date.now(),
-        members: [],
+        members: currentUser ? [{ id: 'm-' + Date.now(), name: currentUser }] : [],
         expenses: [],
       };
       return newRoom;
     }
     return found;
-  }, [rooms, activeRoomId]);
+  }, [rooms, activeRoomId, currentUser]);
 
   const members = activeRoom.members || [];
   const expenses = activeRoom.expenses || [];
@@ -112,6 +165,12 @@ export default function App() {
     members.forEach(m => { map[m.id] = m.name; });
     return map;
   }, [members]);
+
+  // Check if currentUser is a member of the currently active room
+  const isCurrentUserInActiveRoom = useMemo(() => {
+    if (!currentUser) return false;
+    return members.some(m => m.name.toLowerCase() === currentUser.toLowerCase());
+  }, [members, currentUser]);
 
   // Save to localStorage immediately on any state change
   useEffect(() => {
@@ -180,9 +239,14 @@ export default function App() {
     });
   };
 
+  // Default payer and participants
   useEffect(() => {
     if (members.length > 0) {
-      if (!payerId || !members.some(m => m.id === payerId)) {
+      // Prefer setting currentUser as default payer if they are in the list
+      const myMember = members.find(m => currentUser && m.name.toLowerCase() === currentUser.toLowerCase());
+      if (myMember) {
+        setPayerId(myMember.id);
+      } else if (!payerId || !members.some(m => m.id === payerId)) {
         setPayerId(members[0].id);
       }
       setSelectedParticipants(members.map(m => m.id));
@@ -190,7 +254,7 @@ export default function App() {
       setPayerId('');
       setSelectedParticipants([]);
     }
-  }, [members]);
+  }, [members, currentUser]);
 
   const handleSelectRoom = (roomId) => {
     setActiveRoomId(roomId);
@@ -203,11 +267,15 @@ export default function App() {
     const clean = newListName.trim();
     if (!clean) return;
     const newId = clean.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString().slice(-4);
+    
+    // Automatically include currentUser as first member if known
+    const initialMembers = currentUser ? [{ id: 'm-' + Date.now(), name: currentUser }] : [];
+
     const newRoom = {
       id: newId,
       name: clean,
       updatedAt: Date.now(),
-      members: [],
+      members: initialMembers,
       expenses: [],
     };
 
@@ -217,6 +285,24 @@ export default function App() {
     setNewListName('');
     setIsAddingList(false);
     syncManager.updateRoomState(newId, newRoom);
+  };
+
+  const handleJoinListAsCurrentUser = () => {
+    if (!currentUser) {
+      setIsSelectingUser(true);
+      return;
+    }
+    if (isCurrentUserInActiveRoom) return;
+
+    const newMember = {
+      id: 'm-' + Date.now(),
+      name: currentUser,
+    };
+
+    updateActiveRoom(prev => ({
+      ...prev,
+      members: [...prev.members, newMember],
+    }));
   };
 
   const handleDeleteList = (roomIdToDelete) => {
@@ -230,7 +316,7 @@ export default function App() {
         id: 'new-list-' + Date.now().toString().slice(-4),
         name: 'New List',
         updatedAt: Date.now(),
-        members: [],
+        members: currentUser ? [{ id: 'm-' + Date.now(), name: currentUser }] : [],
         expenses: [],
       };
       setRooms([freshList]);
@@ -373,6 +459,21 @@ export default function App() {
     return calculateDetailedSummary(members, expenses);
   }, [members, expenses]);
 
+  // Current user's direct settlements (Whom to pay, who owes me)
+  const mySettlements = useMemo(() => {
+    if (!currentUser) return { myDebtsToPay: [], myCreditsToReceive: [], myNetBalance: 0 };
+    const lower = currentUser.toLowerCase();
+    
+    const myDebtsToPay = calculation.settlements.filter(tx => tx.fromName.toLowerCase() === lower);
+    const myCreditsToReceive = calculation.settlements.filter(tx => tx.toName.toLowerCase() === lower);
+    
+    const totalToPay = myDebtsToPay.reduce((acc, tx) => acc + tx.amount, 0);
+    const totalToReceive = myCreditsToReceive.reduce((acc, tx) => acc + tx.amount, 0);
+    const myNetBalance = round(totalToReceive - totalToPay);
+
+    return { myDebtsToPay, myCreditsToReceive, myNetBalance };
+  }, [calculation.settlements, currentUser]);
+
   const numAmount = parseFloat(amount) || 0;
   const perPersonPreview = selectedParticipants.length > 0 
     ? round(numAmount / selectedParticipants.length) 
@@ -399,92 +500,142 @@ export default function App() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleShareLink}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition active:scale-95 shadow-xs"
-          >
-            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
-            <span>{copiedLink ? 'Copied!' : 'Share'}</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            {/* Identity Switcher */}
+            <button
+              type="button"
+              onClick={() => setIsSelectingUser(true)}
+              className="flex items-center space-x-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition border border-slate-300"
+              title="Change your identity"
+            >
+              <User className="w-3.5 h-3.5 text-slate-600" />
+              <span className="truncate max-w-[90px]">
+                {currentUser ? currentUser : 'Set Name'}
+              </span>
+            </button>
+
+            {/* Share Link */}
+            <button
+              type="button"
+              onClick={handleShareLink}
+              className="flex items-center space-x-1 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition active:scale-95 shadow-xs"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+              <span>{copiedLink ? 'Copied!' : 'Share'}</span>
+            </button>
+          </div>
         </div>
 
-        {/* Lists Bar - Horizontal Swipe */}
-        <div className="max-w-xl mx-auto px-4 py-2 flex items-center space-x-2 overflow-x-auto no-scrollbar">
-          {rooms.map(r => (
-            <div
-              key={r.id}
-              className={`inline-flex items-center rounded-lg border transition flex-shrink-0 ${
-                r.id === activeRoomId
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                  : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
-              }`}
-            >
+        {/* Personalized Lists Bar */}
+        <div className="max-w-xl mx-auto px-4 py-2 border-t border-slate-100">
+          <div className="flex items-center justify-between pb-1.5 text-[11px] text-slate-500 font-medium">
+            <span>
+              {currentUser ? `Lists for ${currentUser}:` : 'All Lists:'}
+            </span>
+            {currentUser && rooms.length > visibleRooms.length && (
               <button
                 type="button"
-                onClick={() => handleSelectRoom(r.id)}
-                className="px-3 py-1.5 text-xs font-semibold whitespace-nowrap"
+                onClick={() => setListFilterMode(prev => prev === 'my' ? 'all' : 'my')}
+                className="text-slate-700 font-semibold hover:underline"
               >
-                {r.name}
+                {listFilterMode === 'my' ? `Show all (${rooms.length})` : 'Show only mine'}
               </button>
-              {rooms.length > 1 && (
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar pb-0.5">
+            {visibleRooms.map(r => (
+              <div
+                key={r.id}
+                className={`inline-flex items-center rounded-lg border transition flex-shrink-0 ${
+                  r.id === activeRoomId
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                }`}
+              >
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteList(r.id);
-                  }}
-                  className={`pr-2.5 pl-1 py-1 text-xs transition ${
-                    r.id === activeRoomId ? 'text-slate-400 hover:text-rose-400' : 'text-slate-400 hover:text-rose-600'
-                  }`}
-                  title={`Delete "${r.name}"`}
+                  onClick={() => handleSelectRoom(r.id)}
+                  className="px-3 py-1.5 text-xs font-semibold whitespace-nowrap"
+                >
+                  {r.name}
+                </button>
+                {rooms.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteList(r.id);
+                    }}
+                    className={`pr-2.5 pl-1 py-1 text-xs transition ${
+                      r.id === activeRoomId ? 'text-slate-400 hover:text-rose-400' : 'text-slate-400 hover:text-rose-600'
+                    }`}
+                    title={`Delete "${r.name}"`}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+
+            {isAddingList ? (
+              <form onSubmit={handleCreateList} className="flex items-center space-x-1.5 whitespace-nowrap flex-shrink-0">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="New list name..."
+                  value={newListName}
+                  onChange={e => setNewListName(e.target.value)}
+                  className="bg-white border border-slate-400 rounded-lg px-2.5 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 w-32"
+                />
+                <button
+                  type="submit"
+                  className="px-2.5 py-1 bg-slate-900 text-white text-xs font-semibold rounded-lg"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingList(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 text-xs"
                 >
                   ✕
                 </button>
-              )}
-            </div>
-          ))}
-
-          {isAddingList ? (
-            <form onSubmit={handleCreateList} className="flex items-center space-x-1.5 whitespace-nowrap flex-shrink-0">
-              <input
-                type="text"
-                autoFocus
-                placeholder="List name..."
-                value={newListName}
-                onChange={e => setNewListName(e.target.value)}
-                className="bg-white border border-slate-400 rounded-lg px-2.5 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 w-32"
-              />
-              <button
-                type="submit"
-                className="px-2.5 py-1 bg-slate-900 text-white text-xs font-semibold rounded-lg"
-              >
-                Add
-              </button>
+              </form>
+            ) : (
               <button
                 type="button"
-                onClick={() => setIsAddingList(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 text-xs"
+                onClick={() => setIsAddingList(true)}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 border border-dashed border-slate-300 hover:border-slate-400 flex items-center space-x-1 whitespace-nowrap flex-shrink-0"
               >
-                ✕
+                <Plus className="w-3.5 h-3.5" />
+                <span>New List</span>
               </button>
-            </form>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIsAddingList(true)}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 border border-dashed border-slate-300 hover:border-slate-400 flex items-center space-x-1 whitespace-nowrap flex-shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New List</span>
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </header>
 
       {/* Main Container */}
       <main className="max-w-xl mx-auto px-4 py-4 space-y-4">
-        
+
+        {/* Prompt to join list if currentUser is not yet in this room */}
+        {currentUser && !isCurrentUserInActiveRoom && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center justify-between text-xs text-amber-900 shadow-xs">
+            <div>
+              <span>You are viewing <strong>{activeRoom.name}</strong> as <strong>{currentUser}</strong>.</span>
+              <p className="text-[11px] text-amber-700 mt-0.5">You are not added to this list yet.</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleJoinListAsCurrentUser}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition text-xs flex-shrink-0 ml-2"
+            >
+              + Join List
+            </button>
+          </div>
+        )}
+
         {/* Clean Top Switcher (Expenses vs Settle Up) */}
         <div className="grid grid-cols-2 gap-2 bg-slate-200/80 p-1 rounded-xl">
           <button
@@ -548,32 +699,39 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
                   <Users className="w-3.5 h-3.5 text-slate-700" />
-                  <span>Members ({members.length})</span>
+                  <span>Members in this list ({members.length})</span>
                 </h2>
               </div>
 
               {members.length === 0 ? (
                 <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-3.5 text-center text-xs text-slate-500 leading-relaxed">
-                  👋 Type your name and your friends' names below to get started!
+                  👋 Add yourself and your friends below to split expenses!
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
-                  {members.map(m => (
-                    <span
-                      key={m.id}
-                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200"
-                    >
-                      <span>{m.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveMember(m.id)}
-                        className="text-slate-400 hover:text-rose-600 p-0.5 rounded-full"
-                        title={`Remove ${m.name}`}
+                  {members.map(m => {
+                    const isMe = currentUser && m.name.toLowerCase() === currentUser.toLowerCase();
+                    return (
+                      <span
+                        key={m.id}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border ${
+                          isMe 
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-xs' 
+                            : 'bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
                       >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
+                        <span>{m.name} {isMe && '(You)'}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMember(m.id)}
+                          className={`p-0.5 rounded-full ${isMe ? 'text-slate-400 hover:text-rose-400' : 'text-slate-400 hover:text-rose-600'}`}
+                          title={`Remove ${m.name}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
                 </div>
               )}
 
@@ -633,7 +791,7 @@ export default function App() {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Food, Cab"
+                        placeholder="e.g. Dinner, Cab"
                         value={description}
                         onChange={e => setDescription(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -649,11 +807,14 @@ export default function App() {
                         onChange={e => setPayerId(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
                       >
-                        {members.map(m => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
+                        {members.map(m => {
+                          const isMe = currentUser && m.name.toLowerCase() === currentUser.toLowerCase();
+                          return (
+                            <option key={m.id} value={m.id}>
+                              {m.name} {isMe ? '(You)' : ''}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                   </div>
@@ -662,7 +823,7 @@ export default function App() {
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-slate-700">
-                        Who shared?
+                        Who participated?
                       </span>
                       <div className="space-x-2 text-slate-500">
                         <button type="button" onClick={selectAllParticipants} className="hover:text-slate-900 font-semibold">
@@ -678,6 +839,7 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-1.5">
                       {members.map(m => {
                         const isChecked = selectedParticipants.includes(m.id);
+                        const isMe = currentUser && m.name.toLowerCase() === currentUser.toLowerCase();
                         return (
                           <button
                             key={m.id}
@@ -689,7 +851,9 @@ export default function App() {
                                 : 'bg-slate-100 border-slate-200 text-slate-400 line-through'
                             }`}
                           >
-                            <span className="truncate pr-1">{m.name}</span>
+                            <span className="truncate pr-1">
+                              {m.name} {isMe && '(You)'}
+                            </span>
                             {isChecked ? (
                               <CheckSquare className="w-3.5 h-3.5 text-slate-900 flex-shrink-0" />
                             ) : (
@@ -717,7 +881,7 @@ export default function App() {
               )}
             </section>
 
-            {/* Recorded Expenses List */}
+            {/* Recorded Expenses List with Transparent Item Details */}
             <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2.5">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -733,8 +897,16 @@ export default function App() {
                   No expenses added yet.
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {expenses.map(exp => {
+                    const payerName = memberMap[exp.payerId] || 'Unknown';
+                    const isPayerMe = currentUser && payerName.toLowerCase() === currentUser.toLowerCase();
+
+                    // Find if currentUser was part of participants
+                    const currentMemberObj = members.find(m => currentUser && m.name.toLowerCase() === currentUser.toLowerCase());
+                    const myShareAmount = currentMemberObj && exp.splits ? exp.splits[currentMemberObj.id] : null;
+                    const didIParticipate = myShareAmount !== undefined && myShareAmount !== null;
+
                     const participantNames = Object.keys(exp.splits || {})
                       .map(id => memberMap[id])
                       .filter(Boolean);
@@ -743,33 +915,73 @@ export default function App() {
                     return (
                       <div
                         key={exp.id}
-                        className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-2"
+                        className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 shadow-xs"
                       >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline justify-between">
-                            <h4 className="text-sm font-bold text-slate-900 truncate">
-                              {exp.description}
-                            </h4>
-                            <span className="text-sm font-extrabold text-slate-900 font-mono pl-2">
-                              ₹{exp.amount.toFixed(2)}
-                            </span>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between">
+                              <h4 className="text-sm font-bold text-slate-900 truncate">
+                                {exp.description}
+                              </h4>
+                              <span className="text-sm font-extrabold text-slate-900 font-mono pl-2">
+                                ₹{exp.amount.toFixed(2)}
+                              </span>
+                            </div>
+
+                            {/* Who bought / paid */}
+                            <div className="flex items-center space-x-1.5 text-xs mt-1">
+                              <span className="text-slate-500">Khareeda:</span>
+                              {isPayerMe ? (
+                                <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[11px]">
+                                  ⭐ Aapne ({payerName})
+                                </span>
+                              ) : (
+                                <span className="font-bold text-slate-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md text-[11px]">
+                                  👤 {payerName}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Who participated */}
+                            <div className="text-[11px] text-slate-500 mt-1">
+                              <span className="text-slate-600 font-medium">Shaamil the: </span>
+                              <span>{isAll ? 'Sabhi members' : participantNames.join(', ')}</span>
+                            </div>
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Paid by <strong className="text-slate-800">{memberMap[exp.payerId] || 'Unknown'}</strong>
-                          </p>
-                          <p className="text-[11px] text-slate-600 mt-0.5">
-                            {isAll ? 'Shared by all' : `Shared by ${participantNames.join(', ')}`}
-                          </p>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExpense(exp.id)}
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded-lg -mr-1"
+                            title="Delete expense"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteExpense(exp.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg -mr-1"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Personalized Share Calculation for currentUser */}
+                        {currentUser && currentMemberObj && (
+                          <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                            {didIParticipate ? (
+                              <div className="flex items-center space-x-1.5 text-slate-700 font-medium">
+                                <span>👉 Aapka hissa (Your share):</span>
+                                <strong className="text-slate-900 font-mono font-bold">
+                                  ₹{myShareAmount.toFixed(2)}
+                                </strong>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">
+                                ⚪ Aap isme shaamil nahi the (₹0)
+                              </span>
+                            )}
+
+                            {isPayerMe && (
+                              <span className="text-[10px] text-emerald-600 font-semibold">
+                                ✓ Paid in full
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -784,180 +996,225 @@ export default function App() {
         {activeTab === 'settle' && (
           <div className="space-y-4 animate-in fade-in duration-150">
             
-            {/* Main Settlement Box (The Final Result Friends Care About) */}
-            <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <h2 className="text-sm font-extrabold text-slate-900 flex items-center space-x-1.5">
-                  <span>💸 Final Settlements</span>
-                </h2>
-                <span className="text-xs text-slate-500">
-                  {calculation.settlements.length === 0 ? 'All Settled' : `${calculation.settlements.length} payment(s)`}
-                </span>
-              </div>
-
-              {calculation.settlements.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-200 leading-relaxed">
-                  ✅ <strong>Everyone is settled up!</strong><br />No payments pending for {activeRoom.name}.
+            {/* 1. PERSONALIZED SETTLEMENT SECTION: MERA HISAAB */}
+            {currentUser && isCurrentUserInActiveRoom ? (
+              <section className="bg-slate-900 text-white border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3.5">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                  <div className="flex items-center space-x-2">
+                    <UserCheck className="w-4 h-4 text-emerald-400" />
+                    <h2 className="text-sm font-extrabold tracking-tight">
+                      Mera Hisaab ({currentUser})
+                    </h2>
+                  </div>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                    Your Dues
+                  </span>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {calculation.settlements.map((tx, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-center justify-between shadow-xs"
-                    >
-                      <div className="flex items-center space-x-2 text-xs min-w-0">
-                        <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[10px] flex-shrink-0">
-                          {idx + 1}
-                        </span>
-                        <span className="font-extrabold text-rose-600 truncate text-sm">
-                          {tx.fromName}
-                        </span>
-                        <span className="text-slate-400 text-[11px] flex-shrink-0">
-                          pays ➔
-                        </span>
-                        <span className="font-extrabold text-emerald-600 truncate text-sm">
-                          {tx.toName}
-                        </span>
-                      </div>
 
-                      <div className="font-extrabold text-slate-900 font-mono text-base pl-2 flex-shrink-0">
-                        ₹{tx.amount.toFixed(2)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* Member Net Balances Summary */}
-            <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Member Balances
-              </h3>
-
-              <div className="space-y-2">
-                {calculation.memberRows.map(row => {
-                  const isGetsBack = row.netBalance > 0.01;
-                  const isOwes = row.netBalance < -0.01;
-                  const isInspected = inspectedMemberId === row.id;
-
-                  return (
-                    <div
-                      key={row.id}
-                      onClick={() => setInspectedMemberId(isInspected ? null : row.id)}
-                      className={`border rounded-xl p-3 transition cursor-pointer ${
-                        isInspected
-                          ? 'bg-slate-100/80 border-slate-400'
-                          : 'bg-slate-50 border-slate-200 active:bg-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-900 text-sm">
-                            {row.name}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                              isGetsBack
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : isOwes
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-slate-200 text-slate-600'
-                            }`}
+                {mySettlements.myDebtsToPay.length === 0 && mySettlements.myCreditsToReceive.length === 0 ? (
+                  <div className="py-4 text-center text-xs text-slate-300 bg-slate-800/60 rounded-xl leading-relaxed">
+                    🎉 <strong>Aapka hisaab clear hai!</strong><br />Aapko na kisi ko dena hai, na kisi se lena hai.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* You Have To Pay (Dena Hai) */}
+                    {mySettlements.myDebtsToPay.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[11px] font-bold text-rose-300 uppercase tracking-wider block">
+                          🔴 Aapko Inhe Dena Hai (You Pay):
+                        </span>
+                        {mySettlements.myDebtsToPay.map((tx, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-slate-800/90 border border-rose-900/40 rounded-xl p-3 flex items-center justify-between"
                           >
-                            {row.status}
-                          </span>
-                        </div>
-
-                        <div
-                          className={`font-mono font-extrabold text-base ${
-                            isGetsBack
-                              ? 'text-emerald-600'
-                              : isOwes
-                              ? 'text-rose-600'
-                              : 'text-slate-500'
-                          }`}
-                        >
-                          {isGetsBack && '+'}
-                          ₹{row.netBalance.toFixed(2)}
-                        </div>
+                            <div className="text-xs">
+                              <span className="text-slate-300">Pay to </span>
+                              <strong className="text-white font-bold text-sm">{tx.toName}</strong>
+                            </div>
+                            <div className="font-mono font-extrabold text-rose-400 text-base">
+                              ₹{tx.amount.toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                    )}
 
-                      <div className="flex items-center justify-between text-xs text-slate-500 mt-2 pt-2 border-t border-slate-200/60">
-                        <span>Paid: <strong className="text-slate-700 font-mono">₹{row.totalPaid.toFixed(2)}</strong></span>
-                        <span>Share: <strong className="text-slate-700 font-mono">₹{row.fairShare.toFixed(2)}</strong></span>
-                        <span className="text-[10px] text-slate-400 flex items-center space-x-0.5">
-                          <span>Receipt</span>
-                          {isInspected ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    {/* You Will Receive (Lena Hai) */}
+                    {mySettlements.myCreditsToReceive.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider block">
+                          🟢 Inse Aapko Milenge (You Receive):
                         </span>
+                        {mySettlements.myCreditsToReceive.map((tx, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-slate-800/90 border border-emerald-900/40 rounded-xl p-3 flex items-center justify-between"
+                          >
+                            <div className="text-xs">
+                              <strong className="text-white font-bold text-sm">{tx.fromName}</strong>
+                              <span className="text-slate-300"> will pay you</span>
+                            </div>
+                            <div className="font-mono font-extrabold text-emerald-400 text-base">
+                              ₹{tx.amount.toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Overall Net Balance */}
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Total Net Balance:</span>
+                      <span className={`font-mono font-bold text-sm ${
+                        mySettlements.myNetBalance > 0.01 
+                          ? 'text-emerald-400' 
+                          : mySettlements.myNetBalance < -0.01 
+                          ? 'text-rose-400' 
+                          : 'text-slate-300'
+                      }`}>
+                        {mySettlements.myNetBalance > 0.01 && `+₹${mySettlements.myNetBalance.toFixed(2)} (You get back)`}
+                        {mySettlements.myNetBalance < -0.01 && `-₹${Math.abs(mySettlements.myNetBalance).toFixed(2)} (You owe)`}
+                        {Math.abs(mySettlements.myNetBalance) <= 0.01 && '₹0.00 (All settled)'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </section>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs text-center space-y-2">
+                <p className="text-xs text-slate-600">
+                  {currentUser ? `Aap "${activeRoom.name}" ke member nahi hain.` : 'Apna hisaab dekhne ke liye pehle apna naam select karein.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => currentUser ? handleJoinListAsCurrentUser() : setIsSelectingUser(true)}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold transition"
+                >
+                  {currentUser ? `+ Join "${activeRoom.name}" as ${currentUser}` : 'Set Your Name'}
+                </button>
+              </div>
+            )}
+
+            {/* 2. COMPLETE GROUP SETTLEMENTS (COLLAPSIBLE FOR TRANSPARENCY) */}
+            <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowFullGroupSettlements(!showFullGroupSettlements)}
+                className="w-full flex items-center justify-between pb-1 text-left"
+              >
+                <div className="flex items-center space-x-1.5">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                    👥 Full Group Settlements ({calculation.settlements.length})
+                  </h3>
+                </div>
+                <div className="text-slate-400 text-xs flex items-center space-x-1 font-medium">
+                  <span>{showFullGroupSettlements ? 'Hide' : 'View All'}</span>
+                  {showFullGroupSettlements ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </div>
+              </button>
+
+              {showFullGroupSettlements && (
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  {calculation.settlements.length === 0 ? (
+                    <div className="py-4 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-200">
+                      ✅ Sabhi ka hisaab barabar hai. Koi dues pending nahi hain.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {calculation.settlements.map((tx, idx) => (
+                        <div
+                          key={idx}
+                          className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-2 text-xs min-w-0">
+                            <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[10px] flex-shrink-0">
+                              {idx + 1}
+                            </span>
+                            <span className="font-extrabold text-rose-600 truncate text-sm">
+                              {tx.fromName}
+                            </span>
+                            <span className="text-slate-400 text-[11px] flex-shrink-0">
+                              pays ➔
+                            </span>
+                            <span className="font-extrabold text-emerald-600 truncate text-sm">
+                              {tx.toName}
+                            </span>
+                          </div>
+
+                          <div className="font-extrabold text-slate-900 font-mono text-base pl-2 flex-shrink-0">
+                            ₹{tx.amount.toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Member Balances Breakdown */}
+                  <div className="pt-2">
+                    <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      All Member Balances:
+                    </h4>
+                    <div className="space-y-1.5">
+                      {calculation.memberRows.map(row => {
+                        const isGetsBack = row.netBalance > 0.01;
+                        const isOwes = row.netBalance < -0.01;
+                        const isInspected = inspectedMemberId === row.id;
+
+                        return (
+                          <div
+                            key={row.id}
+                            onClick={() => setInspectedMemberId(isInspected ? null : row.id)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs transition cursor-pointer hover:bg-slate-100"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-slate-900">
+                                {row.name}
+                              </span>
+                              <span className={`font-mono font-bold ${
+                                isGetsBack ? 'text-emerald-600' : isOwes ? 'text-rose-600' : 'text-slate-500'
+                              }`}>
+                                {isGetsBack && '+'}₹{row.netBalance.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Inspected Member Receipt Details */}
+                  {inspectedMember && (
+                    <div className="bg-slate-100 border border-slate-300 rounded-xl p-3 text-xs space-y-2 animate-in fade-in">
+                      <div className="flex items-center justify-between pb-1 border-b border-slate-200 font-bold">
+                        <span>Details for {inspectedMember.name}:</span>
+                        <button type="button" onClick={() => setInspectedMemberId(null)} className="text-slate-500">✕</button>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-slate-500 font-bold block">Paid:</span>
+                        {inspectedMember.details.paidList.map((p, i) => (
+                          <div key={i} className="flex justify-between py-0.5">
+                            <span>• {p.description}</span>
+                            <span className="font-mono">₹{p.amount.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-slate-500 font-bold block">Share:</span>
+                        {inspectedMember.details.participatedList.map((s, i) => (
+                          <div key={i} className="flex justify-between py-0.5">
+                            <span>• {s.description}</span>
+                            <span className="font-mono">₹{s.share.toFixed(2)}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* ITEMIZED AUDIT EXPANSION */}
-              {inspectedMember && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs space-y-2.5 animate-in fade-in">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-200">
-                    <span className="font-bold text-slate-900">
-                      Receipt Breakdown for {inspectedMember.name}:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setInspectedMemberId(null)}
-                      className="text-slate-400 hover:text-slate-600 p-1"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
-                        Paid by {inspectedMember.name} (₹{inspectedMember.totalPaid.toFixed(2)}):
-                      </span>
-                      {inspectedMember.details.paidList.length === 0 ? (
-                        <p className="text-slate-400 italic">No payments made.</p>
-                      ) : (
-                        inspectedMember.details.paidList.map((p, i) => (
-                          <div key={i} className="flex justify-between py-0.5 border-b border-slate-200/50">
-                            <span className="text-slate-700">• {p.description}</span>
-                            <span className="font-mono font-medium">₹{p.amount.toFixed(2)}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
-                        Shared / Consumed (₹{inspectedMember.fairShare.toFixed(2)}):
-                      </span>
-                      {inspectedMember.details.participatedList.length === 0 ? (
-                        <p className="text-slate-400 italic">No bills shared.</p>
-                      ) : (
-                        inspectedMember.details.participatedList.map((s, i) => (
-                          <div key={i} className="flex justify-between py-0.5 border-b border-slate-200/50">
-                            <span className="text-slate-700">• {s.description}</span>
-                            <span className="font-mono font-medium">₹{s.share.toFixed(2)}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-200 text-slate-800 text-xs">
-                    <strong>Net:</strong> Paid (₹{inspectedMember.totalPaid.toFixed(2)}) − Share (₹{inspectedMember.fairShare.toFixed(2)}) ={' '}
-                    <strong className={inspectedMember.netBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-                      {inspectedMember.netBalance >= 0 ? '+' : ''}₹{inspectedMember.netBalance.toFixed(2)}
-                    </strong>
-                  </div>
+                  )}
                 </div>
               )}
             </section>
 
-            {/* Optional Math Verification Collapsible (Keeps main screen uncluttered) */}
+            {/* Optional Math Verification Collapsible */}
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
               <button
                 type="button"
@@ -999,6 +1256,102 @@ export default function App() {
         )}
 
       </main>
+
+      {/* USER SELECTION MODAL (1-Tap Identity Prompt) */}
+      {isSelectingUser && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <User className="w-5 h-5 text-slate-800" />
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Aapka Naam Kya Hai?
+                </h3>
+              </div>
+              {currentUser && (
+                <button
+                  type="button"
+                  onClick={() => setIsSelectingUser(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Apna naam choose karein taaki aapko sirf aapki lists aur aapka personal hisaab dikhe.
+            </p>
+
+            {/* Existing Known Members Chips */}
+            {allKnownMemberNames.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Select your name:
+                </span>
+                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                  {allKnownMemberNames.map(name => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => handleSetCurrentUser(name)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+                        currentUser.toLowerCase() === name.toLowerCase()
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-slate-100 text-slate-800 border-slate-200 hover:border-slate-400'
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Or Type New Name */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSetCurrentUser(userNameInput);
+              }}
+              className="space-y-3 pt-2 border-t border-slate-100"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Ya naya naam likhein:
+                </label>
+                <input
+                  type="text"
+                  autoFocus={allKnownMemberNames.length === 0}
+                  placeholder="e.g. Anish, Rahul..."
+                  value={userNameInput}
+                  onChange={e => setUserNameInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="submit"
+                  disabled={!userNameInput.trim()}
+                  className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                >
+                  Confirm & Continue
+                </button>
+                {currentUser && (
+                  <button
+                    type="button"
+                    onClick={() => setIsSelectingUser(false)}
+                    className="px-3 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-200"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
